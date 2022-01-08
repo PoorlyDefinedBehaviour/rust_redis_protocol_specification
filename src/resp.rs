@@ -5,7 +5,8 @@
 /// so there is never a need to scan the payload for special characters like it happens for instance with JSON,
 /// nor to quote the payload that needs to be sent to the server.
 use crate::data_type::DataType;
-use miette::{Diagnostic, Result, SourceSpan};
+use miette::{Diagnostic, IntoDiagnostic, Result, SourceSpan};
+use std::fmt::Write;
 use thiserror::Error;
 
 #[derive(Debug, PartialEq, Diagnostic, Error)]
@@ -245,6 +246,28 @@ pub fn parse(input: Vec<u8>) -> Result<DataType, ParserError> {
   Parser::new(input).data_type()
 }
 
+pub fn encode(input: &str) -> Result<String> {
+  let mut buffer = String::new();
+
+  let pieces: Vec<&str> = input.split(" ").filter(|piece| *piece != " ").collect();
+
+  // If we have a command with arguments, like LLEN mylist
+  // the command is encoded as an RESP array.
+  if pieces.len() > 1 {
+    write!(&mut buffer, "*{}\r\n", pieces.len()).into_diagnostic()?;
+  }
+
+  for piece in pieces {
+    if piece.chars().nth(0).unwrap().is_digit(10) {
+      write!(&mut buffer, ":{}\r\n", piece).into_diagnostic()?;
+    } else {
+      write!(&mut buffer, "${}\r\n{}\r\n", piece.len(), piece).into_diagnostic()?;
+    }
+  }
+
+  Ok(buffer)
+}
+
 #[cfg(test)]
 mod tests {
   use miette::{IntoDiagnostic, NamedSource};
@@ -363,6 +386,21 @@ mod tests {
     for input in tests {
       let actual = parse(bytes(input));
       assert_eq!(Ok(DataType::Null), actual);
+    }
+  }
+
+  #[test]
+  fn test_encode() {
+    let tests = vec![
+      ("LLEN mylist", "*2\r\n$4\r\nLLEN\r\n$6\r\nmylist\r\n"),
+      (
+        r#"SETEX mykey 10 "Hello""#,
+        "*4\r\n$5\r\nSETEX\r\n$5\r\nmykey\r\n:10\r\n$7\r\n\"Hello\"\r\n",
+      ),
+    ];
+
+    for (input, expected) in tests {
+      assert_eq!(String::from(expected), encode(input).unwrap());
     }
   }
 }
