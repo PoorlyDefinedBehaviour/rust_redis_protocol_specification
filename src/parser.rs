@@ -5,18 +5,45 @@
 /// so there is never a need to scan the payload for special characters like it happens for instance with JSON,
 /// nor to quote the payload that needs to be sent to the server.
 use crate::data_type::DataType;
+use miette::{Diagnostic, Result, SourceSpan};
 use thiserror::Error;
 
-#[derive(Debug, PartialEq, Error)]
+#[derive(Debug, PartialEq, Diagnostic, Error)]
 pub enum ParserError {
-  #[error("unexpected byte at position {0}")]
-  UnexpectedByte(usize),
+  #[error("unexpected byte sequence")]
+  #[diagnostic()]
+  UnexpectedByte {
+    #[source_code]
+    src: String,
+    #[label("here")]
+    span: SourceSpan,
+  },
   #[error("the input ended unexpectedly")]
-  UnexpectedEndOfInput,
-  #[error("expected type {expected} but got {got}")]
-  UnexpectedType { expected: String, got: String },
-  #[error("expected value to be {expected} but got {got}")]
-  UnexpectedValue { expected: String, got: String },
+  #[diagnostic()]
+  UnexpectedEndOfInput {
+    #[source_code]
+    src: String,
+    #[label("here")]
+    span: SourceSpan,
+  },
+  #[error("unexpected type")]
+  #[diagnostic()]
+  UnexpectedType {
+    #[source_code]
+    src: String,
+    #[label("{}", message)]
+    span: SourceSpan,
+    message: String,
+  },
+  #[error("unexpected value")]
+  #[diagnostic()]
+  UnexpectedValue {
+    #[source_code]
+    src: String,
+    #[label("{}", message)]
+    span: SourceSpan,
+    message: String,
+  },
 }
 
 #[derive(Debug)]
@@ -29,6 +56,10 @@ struct Parser {
 impl Parser {
   fn new(input: Vec<u8>) -> Self {
     Self { input, position: 0 }
+  }
+
+  fn input_as_string(&self) -> String {
+    String::from_utf8_lossy(&self.input).to_string()
   }
 
   /// Advances the current position by 1.
@@ -66,7 +97,10 @@ impl Parser {
   /// Returns error if the parser is not looking at a crlf.
   fn consume_crlf(&mut self) -> Result<(), ParserError> {
     if !self.is_at_crlf() {
-      Err(ParserError::UnexpectedByte(self.position))
+      Err(ParserError::UnexpectedByte {
+        src: self.input_as_string(),
+        span: (self.position, 2).into(),
+      })
     } else {
       // Skip "\r".
       self.skip();
@@ -79,7 +113,10 @@ impl Parser {
 
   fn data_type(&mut self) -> Result<DataType, ParserError> {
     match self.next_byte() {
-      None => Err(ParserError::UnexpectedEndOfInput),
+      None => Err(ParserError::UnexpectedEndOfInput {
+        src: self.input_as_string(),
+        span: (self.position, 1).into(),
+      }),
       Some(byte) => match byte {
         b'+' => self.simple_string(),
         b'$' => self.bulk_string_or_null(),
@@ -159,8 +196,9 @@ impl Parser {
 
     match lexeme.parse::<i64>() {
       Err(_) => Err(ParserError::UnexpectedType {
-        expected: String::from("int"),
-        got: lexeme,
+        src: self.input_as_string(),
+        span: (int_starts_at, lexeme.len()).into(),
+        message: String::from("expected integer"),
       }),
       Ok(i) => Ok(i),
     }
@@ -175,6 +213,8 @@ impl Parser {
   }
 
   fn array_or_null(&mut self) -> Result<DataType, ParserError> {
+    let array_length_starts_at = self.position;
+
     let array_length = self.parse_int()?;
 
     self.consume_crlf()?;
@@ -185,8 +225,9 @@ impl Parser {
 
     if array_length < 0 {
       return Err(ParserError::UnexpectedValue {
-        expected: String::from("positive integer"),
-        got: array_length.to_string(),
+        src: self.input_as_string(),
+        span: (array_length_starts_at, array_length.to_string().len()).into(),
+        message: String::from("expected integer greater than or equal to -1"),
       });
     }
 
@@ -206,6 +247,8 @@ pub fn parse(input: Vec<u8>) -> Result<DataType, ParserError> {
 
 #[cfg(test)]
 mod tests {
+  use miette::{IntoDiagnostic, NamedSource};
+
   use super::*;
 
   fn bytes(s: &str) -> Vec<u8> {
