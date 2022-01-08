@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 tokio = { version = "1.15.0", features = ["full"] }
 thiserror = "1.0"
+miette = { version = "3.3.0", features = ["fancy"] }
