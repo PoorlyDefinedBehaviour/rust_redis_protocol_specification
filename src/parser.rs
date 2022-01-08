@@ -287,6 +287,24 @@ mod tests {
           DataType::Int(2),
         ])),
       ),
+      (
+        "*2\r\n*3\r\n:1\r\n:2\r\n:3\r\n*2\r\n+Foo\r\n-Bar\r\n",
+        Ok(DataType::Array(vec![
+          DataType::Array(vec![DataType::Int(1), DataType::Int(2), DataType::Int(3)]),
+          DataType::Array(vec![
+            DataType::SimpleString(String::from("Foo")),
+            DataType::Error(String::from("Bar")),
+          ]),
+        ])),
+      ),
+      (
+        "*3\r\n$3\r\nfoo\r\n$-1\r\n$3\r\nbar\r\n",
+        Ok(DataType::Array(vec![
+          DataType::BulkString(String::from("foo")),
+          DataType::Null,
+          DataType::BulkString(String::from("bar")),
+        ])),
+      ),
     ];
 
     for (input, expected) in tests {
