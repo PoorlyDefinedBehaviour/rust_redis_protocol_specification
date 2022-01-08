@@ -85,7 +85,7 @@ impl Parser {
         b'$' => self.bulk_string_or_null(),
         b'-' => self.error(),
         b':' => self.int(),
-        b'*' => self.array(),
+        b'*' => self.array_or_null(),
         _ => todo!(),
       },
     }
@@ -174,10 +174,14 @@ impl Parser {
     Ok(DataType::Int(int))
   }
 
-  fn array(&mut self) -> Result<DataType, ParserError> {
+  fn array_or_null(&mut self) -> Result<DataType, ParserError> {
     let array_length = self.parse_int()?;
 
     self.consume_crlf()?;
+
+    if array_length == -1 {
+      return Ok(DataType::Null);
+    }
 
     if array_length < 0 {
       return Err(ParserError::UnexpectedValue {
@@ -293,7 +297,11 @@ mod tests {
 
   #[test]
   fn null() {
-    let actual = parse(bytes("$-1\r\n"));
-    assert_eq!(Ok(DataType::Null), actual);
+    let tests = vec!["$-1\r\n", "*-1\r\n"];
+
+    for input in tests {
+      let actual = parse(bytes(input));
+      assert_eq!(Ok(DataType::Null), actual);
+    }
   }
 }

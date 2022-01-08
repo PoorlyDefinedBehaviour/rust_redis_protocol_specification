@@ -103,6 +103,8 @@ pub enum DataType {
   /// A Bulk String with length equal to -1 and with no data
   /// represents a Null value.
   ///
+  /// An array with length equal to -1 and no data also represents a Null value.
+  ///
   /// It is called a Null Bulk String.
   ///
   /// # Examples
