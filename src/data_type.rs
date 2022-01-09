@@ -111,6 +111,7 @@ pub enum DataType {
   ///
   /// ```terminal
   /// "$-1\r\n"
+  /// "*-1\r\n"
   /// ```
   Null,
 }
