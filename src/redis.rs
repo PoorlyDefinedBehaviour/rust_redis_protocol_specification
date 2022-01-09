@@ -45,19 +45,12 @@ impl Redis {
     Ok(Self { stream })
   }
 
-  pub async fn send(&mut self, command: &str) -> Result<Reply> {
+  async fn send_request(&mut self, command: &str) -> Result<Reply> {
     info!(command, "sending command");
-
-    let encoded_command = resp::encode(command)?;
-
-    info!(
-      "sending RESP command: {}",
-      &encoded_command.replace("\r", "\\r").replace("\n", "\\n")
-    );
 
     self
       .stream
-      .write_all(encoded_command.as_bytes())
+      .write_all(command.as_bytes())
       .await
       .into_diagnostic()?;
 
@@ -71,5 +64,71 @@ impl Redis {
       DataType::Error(message) => Ok(Reply::Error(message)),
       data_type => Ok(Reply::Ok(data_type)),
     }
+  }
+
+  pub async fn send(&mut self, command: &str) -> Result<Reply> {
+    info!(command, "sending command");
+
+    let encoded_command = resp::encode(command)?;
+
+    self.send_request(&encoded_command).await
+  }
+
+  pub async fn flushall(&mut self) -> Result<Reply> {
+    self.send_request("FLUSHALL\r\n").await
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  const TEST_REDIS_IP: &'static str = "127.0.0.1:6380";
+
+  #[tokio::test]
+  async fn basic_commands() -> Result<()> {
+    let mut redis = Redis::connect(TEST_REDIS_IP).await?;
+
+    assert_eq!(
+      Reply::Ok(DataType::SimpleString(String::from("OK"))),
+      redis.flushall().await?,
+    );
+
+    assert_eq!(
+      Reply::Ok(DataType::Int(0)),
+      redis.send("LLEN mylist").await?,
+    );
+
+    assert_eq!(
+      Reply::Ok(DataType::Int(1)),
+      redis.send(r#"LPUSH mylist World"#).await?
+    );
+
+    assert_eq!(
+      Reply::Ok(DataType::Int(2)),
+      redis.send(r#"LPUSH mylist Hello"#).await?
+    );
+
+    assert_eq!(
+      Reply::Ok(DataType::Int(2)),
+      redis.send("LLEN mylist").await?,
+    );
+
+    assert_eq!(
+      Reply::Ok(DataType::BulkString(String::from("Hello"))),
+      redis.send("LPOP mylist").await?,
+    );
+
+    assert_eq!(
+      Reply::Ok(DataType::BulkString(String::from("World"))),
+      redis.send("LPOP mylist").await?,
+    );
+
+    assert_eq!(
+      Reply::Ok(DataType::Int(0)),
+      redis.send("LLEN mylist").await?
+    );
+
+    Ok(())
   }
 }
