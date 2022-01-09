@@ -29,7 +29,9 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - name: Setup test environment
-        run: docker-compose -f docker-compose-test.yml
+        run: |
+          docker-compose -f docker-compose-test.yml
+          sleep 10
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
