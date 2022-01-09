@@ -1,0 +1,8 @@
+version: "3"
+services:
+  db:
+    container_name: "test_pdb_redis"
+    restart: always
+    image: redis:alpine
+    ports:
+      - "6380:6379"
