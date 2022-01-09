@@ -5,7 +5,7 @@
 /// so there is never a need to scan the payload for special characters like it happens for instance with JSON,
 /// nor to quote the payload that needs to be sent to the server.
 use crate::data_type::DataType;
-use miette::{Diagnostic, IntoDiagnostic, Result, SourceSpan};
+use miette::{Diagnostic, Result, SourceSpan};
 use std::fmt::Write;
 use thiserror::Error;
 
@@ -246,7 +246,13 @@ pub fn parse(input: Vec<u8>) -> Result<DataType, ParserError> {
   Parser::new(input).data_type()
 }
 
-pub fn encode(input: &str) -> Result<String> {
+#[derive(Debug, PartialEq, Diagnostic, Error)]
+pub enum EncodeError {
+  #[error(transparent)]
+  Fmt(std::fmt::Error),
+}
+
+pub fn encode(input: &str) -> Result<String, EncodeError> {
   let mut buffer = String::new();
 
   let pieces: Vec<&str> = input.split(" ").filter(|piece| *piece != " ").collect();
@@ -254,14 +260,14 @@ pub fn encode(input: &str) -> Result<String> {
   // If we have a command with arguments, like LLEN mylist
   // the command is encoded as an RESP array.
   if pieces.len() > 1 {
-    write!(&mut buffer, "*{}\r\n", pieces.len()).into_diagnostic()?;
+    write!(&mut buffer, "*{}\r\n", pieces.len()).map_err(EncodeError::Fmt)?;
   }
 
   for piece in pieces {
     if piece.chars().nth(0).unwrap().is_digit(10) {
-      write!(&mut buffer, ":{}\r\n", piece).into_diagnostic()?;
+      write!(&mut buffer, ":{}\r\n", piece).map_err(EncodeError::Fmt)?;
     } else {
-      write!(&mut buffer, "${}\r\n{}\r\n", piece.len(), piece).into_diagnostic()?;
+      write!(&mut buffer, "${}\r\n{}\r\n", piece.len(), piece).map_err(EncodeError::Fmt)?;
     }
   }
 
@@ -270,8 +276,6 @@ pub fn encode(input: &str) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-  use miette::{IntoDiagnostic, NamedSource};
-
   use super::*;
 
   fn bytes(s: &str) -> Vec<u8> {
@@ -397,6 +401,7 @@ mod tests {
         r#"SETEX mykey 10 "Hello""#,
         "*4\r\n$5\r\nSETEX\r\n$5\r\nmykey\r\n:10\r\n$7\r\n\"Hello\"\r\n",
       ),
+      ("PING", ("+PING\r\n")),
     ];
 
     for (input, expected) in tests {
