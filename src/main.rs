@@ -27,19 +27,23 @@ mod redis;
 mod resp;
 
 use miette::Result;
+use redis::Reply;
 
 #[tokio::main]
 async fn main() -> Result<()> {
   std::env::set_var(
     "RUST_LOG",
-    std::env::var("RUST_LOG").unwrap_or(String::from("redis=trace")),
+    std::env::var("RUST_LOG").unwrap_or_else(|_| String::from("redis=trace")),
   );
 
   tracing_subscriber::fmt::init();
 
   let mut redis = Redis::connect("127.0.0.1:6379").await?;
 
-  dbg!(redis.send("LLEN mylist").await);
+  match redis.send("LLEN mylist").await? {
+    Reply::Error(e) => println!("ERROR: {}", e),
+    Reply::Ok(data_type) => println!("OK: {:?}", data_type),
+  };
 
   Ok(())
 }

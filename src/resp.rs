@@ -90,7 +90,7 @@ impl Parser {
       return false;
     }
 
-    return self.input[self.position] == b'\r' && self.input[self.position + 1] == b'\n';
+    self.input[self.position] == b'\r' && self.input[self.position + 1] == b'\n'
   }
 
   /// Tries to consume the crlf the parser is currently looking at.
@@ -129,6 +129,7 @@ impl Parser {
     }
   }
 
+  /// Parses a RESP Simple String.
   fn simple_string(&mut self) -> Result<DataType, ParserError> {
     let string_starts_at = self.position;
 
@@ -170,6 +171,7 @@ impl Parser {
     Ok(string)
   }
 
+  /// Parses a RESP Error.
   fn error(&mut self) -> Result<DataType, ParserError> {
     let error_starts_at = self.position;
 
@@ -186,6 +188,7 @@ impl Parser {
     Ok(error)
   }
 
+  /// Parses and integer.
   fn parse_int(&mut self) -> Result<i64, ParserError> {
     let int_starts_at = self.position;
 
@@ -205,6 +208,7 @@ impl Parser {
     }
   }
 
+  /// Parses a RESP integer.
   fn int(&mut self) -> Result<DataType, ParserError> {
     let int = self.parse_int()?;
 
@@ -213,6 +217,7 @@ impl Parser {
     Ok(DataType::Int(int))
   }
 
+  /// Parses a RESP Array or Null.
   fn array_or_null(&mut self) -> Result<DataType, ParserError> {
     let array_length_starts_at = self.position;
 
@@ -255,7 +260,10 @@ pub enum EncodeError {
 pub fn encode(input: &str) -> Result<String, EncodeError> {
   let mut buffer = String::new();
 
-  let pieces: Vec<&str> = input.split(" ").filter(|piece| *piece != " ").collect();
+  let pieces: Vec<&str> = input
+    .split(' ')
+    .filter(|piece| !piece.is_empty() && *piece != " ")
+    .collect();
 
   // If we have a command with arguments, like LLEN mylist
   // the command is encoded as an RESP array.
@@ -264,7 +272,7 @@ pub fn encode(input: &str) -> Result<String, EncodeError> {
   }
 
   for piece in pieces {
-    if piece.chars().nth(0).unwrap().is_digit(10) {
+    if piece.chars().next().unwrap().is_digit(10) {
       write!(&mut buffer, ":{}\r\n", piece).map_err(EncodeError::Fmt)?;
     } else {
       write!(&mut buffer, "${}\r\n{}\r\n", piece.len(), piece).map_err(EncodeError::Fmt)?;
@@ -401,7 +409,6 @@ mod tests {
         r#"SETEX mykey 10 "Hello""#,
         "*4\r\n$5\r\nSETEX\r\n$5\r\nmykey\r\n:10\r\n$7\r\n\"Hello\"\r\n",
       ),
-      ("PING", ("+PING\r\n")),
     ];
 
     for (input, expected) in tests {
