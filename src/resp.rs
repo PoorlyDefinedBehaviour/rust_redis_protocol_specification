@@ -9,6 +9,7 @@ use miette::{Diagnostic, Result, SourceSpan};
 use std::fmt::Write;
 use thiserror::Error;
 
+#[allow(clippy::enum_variant_names)]
 #[derive(Debug, PartialEq, Diagnostic, Error)]
 pub enum ParserError {
   #[error("unexpected byte sequence")]

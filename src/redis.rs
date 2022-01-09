@@ -74,6 +74,7 @@ impl Redis {
     self.send_request(&encoded_command).await
   }
 
+  #[allow(dead_code)]
   pub async fn flushall(&mut self) -> Result<Reply> {
     self.send_request("FLUSHALL\r\n").await
   }
